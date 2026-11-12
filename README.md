@@ -4,7 +4,7 @@ A TypeScript client and CLI for [Xpensiv](https://xpensiv.si), which checks the 
 
 ## Why
 
-Xpensiv already works from an MCP-aware editor. If you want to run checks from CI, a script or your own agent, you need bearer auth, polling for a job that takes one to three minutes, and a reaction for each kind of failure. An empty credit balance should stop a pipeline and tell someone to top up. A rate limit reports how many seconds to wait. This package gives each of those its own error class and its own CLI exit code.
+Xpensiv already works from an MCP-aware editor. If you want to run checks from CI, a script or your own agent, you need bearer auth, polling until the check completes, and a reaction for each kind of failure. An empty credit balance should stop a pipeline and tell someone to top up. A rate limit reports how many seconds to wait. This package gives each of those its own error class and its own CLI exit code.
 
 It has no runtime dependencies and needs Node 20 or later. The test suite runs against mocked responses and never calls the live API.
 
