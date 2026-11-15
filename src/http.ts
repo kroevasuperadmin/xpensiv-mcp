@@ -17,6 +17,8 @@ export interface Resolved {
   fetch: FetchLike;
   timeoutMs: number;
   userAgent: string;
+  maxRetries: number;
+  sleep: (ms: number) => Promise<void>;
 }
 
 export function resolveOptions(options: ClientOptions = {}): Resolved {
@@ -36,6 +38,8 @@ export function resolveOptions(options: ClientOptions = {}): Resolved {
     fetch: options.fetch ?? ((input, init) => fetch(input, init)),
     timeoutMs: options.timeoutMs ?? 30_000,
     userAgent: options.userAgent ?? DEFAULT_UA,
+    maxRetries: options.maxRetries ?? 2,
+    sleep: options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
   };
 }
 
@@ -57,12 +61,25 @@ export async function send(
     'user-agent': r.userAgent,
     ...options.headers,
   };
-  const init: RequestInit = { method, headers, signal: AbortSignal.timeout(r.timeoutMs) };
-  if (options.json !== undefined) {
-    headers['content-type'] = 'application/json';
-    init.body = JSON.stringify(options.json);
+  if (options.json !== undefined) headers['content-type'] = 'application/json';
+  const payload = options.json !== undefined ? JSON.stringify(options.json) : undefined;
+
+  for (let attempt = 0; ; attempt++) {
+    const init: RequestInit = { method, headers, signal: AbortSignal.timeout(r.timeoutMs) };
+    if (payload !== undefined) init.body = payload;
+    const response = await r.fetch(`${r.baseUrl}${path}`, init);
+    // 429 is returned before any work is queued, so repeating the request is safe even for POST.
+    if (response.status === 429 && attempt < r.maxRetries) {
+      const wait = Number(response.headers.get('retry-after'));
+      await response.body?.cancel().catch(() => undefined);
+      await r.sleep(Math.min(Number.isFinite(wait) && wait > 0 ? wait : 5, 60) * 1000);
+      continue;
+    }
+    return readReply(response);
   }
-  const response = await r.fetch(`${r.baseUrl}${path}`, init);
+}
+
+async function readReply(response: Response): Promise<Reply> {
   const text = await response.text();
   let body: unknown = undefined;
   if (text) {

@@ -1,10 +1,10 @@
 # xpensiv-mcp
 
-A TypeScript client and CLI for [Xpensiv](https://xpensiv.si), which checks the design of a public web page on phone and desktop and returns a fix list with screenshots. It covers both ways in: the REST API under `/api/v1` and the MCP endpoint at `https://xpensiv.si/api/mcp`.
+A TypeScript client and CLI for the [Xpensiv](https://xpensiv.si) REST API under `/api/v1` and the MCP endpoint at `https://xpensiv.si/api/mcp`.
 
 ## Why
 
-Xpensiv already works from an MCP-aware editor. If you want to run checks from CI, a script or your own agent, you need bearer auth, polling until the check completes, and a reaction for each kind of failure. An empty credit balance should stop a pipeline and tell someone to top up. A rate limit reports how many seconds to wait. This package gives each of those its own error class and its own CLI exit code.
+Use this package to call the API from CI, a script or an agent. It handles bearer authentication, polls until a check completes, and maps HTTP errors to error classes. The CLI returns exit codes for usage errors, failed checks, credit errors, timeouts and rate limits.
 
 It has no runtime dependencies and needs Node 20 or later. The test suite runs against mocked responses and never calls the live API.
 
@@ -74,7 +74,7 @@ const check = await mcp.getCheck(id);                      // tool: get_check
 const recent = await mcp.listChecks();                     // tool: list_checks
 ```
 
-`XpensivClient` has `createCheck`, `getCheck`, `getResult` (null while running), `listChecks`, `waitForCheck` and `runCheck`. Both clients take `baseUrl`, `fetch` (to inject your own) and `timeoutMs`. `baseUrl` must be `https` unless it points at localhost.
+`XpensivClient` has `createCheck`, `getCheck`, `getResult` (null while running), `listChecks`, `waitForCheck` and `runCheck`. Both clients take `baseUrl`, `fetch` (to inject your own), `timeoutMs` and `maxRetries`. On HTTP 429 the client waits for `Retry-After` (capped at 60 s) and tries again up to `maxRetries` times (default 2, `0` turns it off). The MCP tool's own "Rate limit reached" answer is not retried. `baseUrl` must be `https` unless it points at localhost.
 
 ## Errors
 
