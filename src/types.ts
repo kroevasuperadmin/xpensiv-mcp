@@ -90,6 +90,10 @@ export interface ClientOptions {
   fetch?: FetchLike;
   /** Per-request timeout in milliseconds. Default 30000. */
   timeoutMs?: number;
+  /** Retries after an HTTP 429, waiting for Retry-After (max 60 s each). Default 2, 0 disables. */
+  maxRetries?: number;
+  /** Replace the sleep used between retries, for tests. */
+  sleep?: (ms: number) => Promise<void>;
   /** Sent as User-Agent. */
   userAgent?: string;
 }

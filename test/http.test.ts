@@ -59,3 +59,41 @@ test('send adds bearer auth and JSON headers and parses the body', async () => {
   assert.equal(seen!.init.body, '{"url":"https://example.com"}');
   assert.deepEqual([out.status, out.body], [202, { ok: true }]);
 });
+
+test('429 is retried after Retry-After and then succeeds', async () => {
+  const sleeps: number[] = [];
+  let calls = 0;
+  const r = resolveOptions({
+    apiKey: 'k', baseUrl: 'https://api.test', sleep: async (ms) => { sleeps.push(ms); },
+    fetch: async () => (++calls < 3 ? new Response('{"error":"Too many requests."}', { status: 429, headers: { 'retry-after': '7' } }) : new Response('{"ok":1}', { status: 200 })),
+  });
+  const out = await send(r, 'POST', '/api/v1/checks', { json: { url: 'https://example.com' } });
+  assert.deepEqual([out.status, calls, sleeps], [200, 3, [7000, 7000]]);
+});
+
+test('after maxRetries the 429 is returned for the caller to map', async () => {
+  let calls = 0;
+  const r = resolveOptions({
+    apiKey: 'k', baseUrl: 'https://api.test', maxRetries: 1, sleep: async () => {},
+    fetch: async () => { calls++; return new Response('{"error":"Too many requests."}', { status: 429, headers: { 'retry-after': '1' } }); },
+  });
+  const out = await send(r, 'GET', '/api/v1/checks');
+  assert.deepEqual([out.status, calls], [429, 2]);
+  assert.ok(errorFromReply(out) instanceof RateLimitError);
+});
+
+test('maxRetries 0 disables retrying, and Retry-After is capped at 60 s', async () => {
+  let calls = 0;
+  const off = resolveOptions({ apiKey: 'k', baseUrl: 'https://api.test', maxRetries: 0, fetch: async () => { calls++; return new Response('{}', { status: 429 }); } });
+  assert.equal((await send(off, 'GET', '/x')).status, 429);
+  assert.equal(calls, 1);
+
+  const sleeps: number[] = [];
+  let n = 0;
+  const capped = resolveOptions({
+    apiKey: 'k', baseUrl: 'https://api.test', maxRetries: 1, sleep: async (ms) => { sleeps.push(ms); },
+    fetch: async () => (n++ ? new Response('{}', { status: 200 }) : new Response('{}', { status: 429, headers: { 'retry-after': '3600' } })),
+  });
+  await send(capped, 'GET', '/x');
+  assert.deepEqual(sleeps, [60000]);
+});
